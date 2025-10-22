@@ -1,0 +1,2 @@
+conda env export > old_env.yml
+conda env create -f old_env.yml -n new_env
