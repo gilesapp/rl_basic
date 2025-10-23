@@ -45,7 +45,7 @@ class OUNoise:
         return self.state
     
     
-def hard_update(target, source):
+def hard_update(source, target):
     for tp, sp in zip(target.parameters(), source.parameters()):
         tp.data.copy_(sp.data)    
     
@@ -92,8 +92,8 @@ class DDPG_Agent:
         self.critic_target = Critic(state_size, action_size, random_seed, 256).to(device)
         self.critic_optimizer = optim.Adam(self.critic_local.parameters(), lr=LR_CRITIC, weight_decay=WEIGHT_DECAY)
         
-        hard_update(self.actor_target,  self.actor_local)
-        hard_update(self.critic_target, self.critic_local)
+        hard_update(self.actor_local, self.actor_target)
+        hard_update(self.critic_local, self.critic_target)
 
         # Noise process
         self.noise = OUNoise((n_agents, action_size), random_seed)
@@ -121,18 +121,18 @@ class DDPG_Agent:
         with torch.no_grad():
             action = self.actor_local(state).cpu().data
         self.actor_local.train()
-        
+       
         # if not eval mode and greater than greedy epsilon
-        if not self.isEval and self.epislon_decay > 0.1 and np.random.uniform() > EPSILON:
-            # action = F.softmax(torch.normal(0, 1, size=(self.action_size,)), dim=0)
+        # if not self.isEval and self.epislon_decay > 0.1 and np.random.uniform() > EPSILON:
+        if not self.isEval and np.random.random() < max(self.epislon_decay, EPSILON):
             noise = self.noise.sample()
             action += noise
             
         action = action[0]
         # action = F.softmax(action[0], dim=0)
-
+        
         # return action
-        return action.numpy()
+        return torch.clip(action, -1, 1).numpy()
 
     def step(self, states, actions, rewards, next_states, dones):
         """Save experience in replay memory, and use random sample from buffer to learn."""
@@ -147,7 +147,7 @@ class DDPG_Agent:
         mem_len = len(self.memory)
 
         # if mem_len % BATCH_SIZE == 0 or (mem_len > 2000 and mem_len % (BATCH_SIZE//2) == 0):
-        if mem_len > 1000:
+        if mem_len > 1000 and mem_len % SOFT_UPDATE_ITER == 0:
             experiences = self.memory.sample()
             self.learn(experiences, GAMMA)
             self.epislon_decay *= 0.98
