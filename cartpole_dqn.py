@@ -29,7 +29,7 @@ def rl_train(model, env, save_pth, n_agents=1, n_episodes=100, n_step=100, print
 
         train_reward.append(local_reward)
         
-    # model.save_model(save_pth)
+    model.save_model(save_pth)
     return train_reward
         
         
@@ -68,14 +68,14 @@ def main():
     model = DQN_Agent(state_size, action_size, n_agent, seed_num)
     
     # train
-    env = gym.make("CartPole-v1")
-    train_reward = rl_train(model, env, "ckpt/cartpole_dqn.pt", n_episodes=n_episodes, n_step=n_step, print_every=print_every)
-    ut.plot_train(train_reward, 'CartPole_DQN')
+    # env = gym.make("CartPole-v1")
+    # train_reward = rl_train(model, env, "ckpt/cartpole_dqn.pt", n_episodes=n_episodes, n_step=n_step, print_every=print_every)
+    # ut.plot_train(train_reward, 'CartPole_DQN')
     
     # test
-    # env = gym.make("CartPole-v1", render_mode="human")
-    # model.load_model("ckpt/cartpole_dqn.pt")
-    # rl_test(env, model)
+    env = gym.make("CartPole-v1", render_mode="human")
+    model.load_model("ckpt/cartpole_dqn.pt")
+    rl_test(env, model)
     
     env.close()
 

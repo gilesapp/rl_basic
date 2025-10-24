@@ -3,7 +3,7 @@ import gymnasium as gym
 import highway_env
 
 # Create our training environment - a cart with a pole that needs balancing
-env = gym.make("highway-v0", render_mode="human")
+env = gym.make("parking-v0", render_mode="human")
 
 # Reset environment to start a new episode
 observation, info = env.reset()
