@@ -9,9 +9,8 @@ field_names = ["state", "action", "reward", "next_state", "done"]
 class ReplayBuffer:
     """ Fixed-size buffer to store experience tuples"""
 
-    def __init__(self, action_size, buffer_size, batch_size, seed, device):
+    def __init__(self, buffer_size, batch_size, seed, device):
         """Initialize a ReplayBuffer object. """
-        self.action_size = action_size
         self.buffer_size = buffer_size  # size of replay buffer
         self.batch_size = batch_size  # how many mem tuples to sample at a time
         random.seed(seed)
