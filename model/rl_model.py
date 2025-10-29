@@ -10,9 +10,10 @@ from .bModel import bModel
 from .util import hard_update, soft_update
 
 
+"""
+Ornstein-Uhlenbeck process
+"""
 class OUNoise:
-    """Ornstein-Uhlenbeck process."""
-
     def __init__(self, size, seed, mu=0., theta=0.15, sigma=0.2):
         """Initialize parameters and noise process."""
         self.size = size
@@ -35,9 +36,10 @@ class OUNoise:
         return self.state
 
 
+"""
+Implementation of DDPG
+"""
 class DDPG(bModel):
-    """Implementation of DDPG"""
-
     def __init__(self, *args, 
                  TAU = 1e-3,
                  LR_ACTOR=1e-3, 
@@ -77,7 +79,7 @@ class DDPG(bModel):
         self.noise = OUNoise((self.n_agents, self.action_size), self.random_seed)
 
     def get_action_space(self):
-        return [[-1.0, 1.0]]
+        return [[-1.0, 1.0] for i in range(self.action_size)]
     
     def load_model(self, pth):
         self.actor_local.load_state_dict(torch.load(pth))
@@ -165,9 +167,10 @@ class DDPG(bModel):
         self.learn_step_counter += 1
 
 
+"""
+Implementation of DQN
+"""
 class DQN(bModel):
-    """Implementation of DQN."""
-
     def __init__(self, *args, **kw):
         """
         Params
@@ -220,7 +223,6 @@ class DQN(bModel):
             self.learn(experiences, self.GAMMA)
             self.epislon_decay *= 0.98
 
-
     def learn(self, experiences, gamma):
         """Update policy and value parameters using given batch of experience tuples.
         Q_targets = r + γ * qnet_target(next_state)
@@ -251,4 +253,129 @@ class DQN(bModel):
         # ----------------------- update target networks ----------------------- #
         if self.learn_step_counter % self.SOFT_UPDATE_ITER == 0:
             hard_update(self.qnet_target, self.qnet_local)
+        self.learn_step_counter += 1
+        
+        
+"""
+Implementation of SAC
+"""
+class SAC(bModel):
+    def __init__(self, *args, 
+                 TAU=0.005, 
+                 ALPHA=0.2,
+                 AUTO_ALPHA=True, 
+                 TARGET_ENT=-2.0,
+                 DETERM=False,
+                 **kw):
+        """
+        Params
+        ======
+            TAU (float):               soft update of target parameters
+            ALPHA (float):             
+            AUTO_ALPHA (float):        alpha learning
+            TARGET_ENT (int):          
+        """
+        super().__init__(*args, **kw)
+
+        # meta param
+        self.TAU = TAU
+        self.ALPHA = ALPHA
+        self.AUTO_ALPHA = AUTO_ALPHA
+        self.TARGET_ENT = TARGET_ENT
+        self.DETERM = DETERM
+        
+        # Actor/Critic Network (w/ Critic Target Network)
+        self.actor = SoftActor(self.state_size, self.action_size).to(self.device)
+        self.critic = SoftCritic(self.state_size, self.action_size).to(self.device)
+        self.critic_tgt = SoftCritic(self.state_size, self.action_size).to(self.device)
+        
+        # self.critic_tgt.load_state_dict(self.critic.state_dict())
+        hard_update(self.critic_tgt, self.critic)
+
+        self.log_alpha = torch.tensor(np.log(self.ALPHA), requires_grad=True, device=self.device)
+        self.alpha_opt = optim.Adam([self.log_alpha], lr=self.LR) if self.AUTO_ALPHA else None
+        self.target_ent = self.TARGET_ENT if self.TARGET_ENT else -self.action_size
+
+        self.actor_opt  = optim.Adam(self.actor.parameters(),  lr=self.LR)
+        self.critic_opt = optim.Adam(self.critic.parameters(), lr=self.LR)
+
+    def get_action_space(self):
+        return [] if self.DETERM else [[-1.0, 1.0]]
+    
+    @property
+    def alpha(self):
+        return self.log_alpha.exp()
+
+    def act(self, state):
+        state = np.expand_dims(state, 0)
+        state = torch.tensor(state, dtype=torch.float).to(self.device)
+        
+        self.actor.eval()
+        with torch.no_grad():
+            action, _ = self.actor(state, self.DETERM)
+        self.actor.train()
+        action = action.cpu().data
+        action = action[0]
+        return torch.clip(action, -1, 1).numpy()
+
+    def step(self, states, actions, rewards, next_states, dones):
+        """Save experience in replay memory, and use random sample from buffer to learn."""
+        # Save experience / reward
+
+        for state, action, reward, next_state, done in zip(states, actions, rewards, next_states, dones):
+            self.memory.add(state, action, reward, next_state, done)
+
+        # Learn, if enough samples are available in memory
+        mem_len = len(self.memory)
+
+        # if mem_len >= self.BUFFER_THRESHOLD and mem_len % self.SOFT_UPDATE_ITER == 0:
+        if mem_len >= self.BUFFER_THRESHOLD:
+            experiences = self.memory.sample()
+            self.learn(experiences, self.GAMMA)
+            self.epislon_decay *= 0.98
+
+    def learn(self, experiences, gamma):
+        """Update policy and value parameters using given batch of experience tuples.
+        Q_targets = r + γ * qnet_target(next_state)
+        where:
+            qnet_target(state) -> Q-value (arg: action)
+        Params
+        ======
+            experiences (Tuple[torch.Tensor]): tuple of (s, a, r, s', done) tuples
+            gamma (float): discount factor
+        """
+        states, actions, rewards, next_states, dones = experiences
+        
+        # ----- Critic loss -----
+        with torch.no_grad():
+            action_next, log_pi_next = self.actor(next_states)
+            Q_targets_next = self.critic_tgt(next_states, action_next) - self.alpha * log_pi_next
+            Q_targets = rewards.unsqueeze(1) + (gamma * Q_targets_next * (1 - dones.unsqueeze(1)))
+            
+        Q_expected1, Q_expected2 = self.critic.both(states, actions)
+        critic_loss = F.mse_loss(Q_expected1, Q_targets) + F.mse_loss(Q_expected2, Q_targets)
+
+        self.critic_opt.zero_grad()
+        critic_loss.backward()
+        self.critic_opt.step()
+
+        # ----- Actor loss -----
+        actions_pred, log_pi = self.actor(states)
+        Q_expected = self.critic(states, actions_pred)
+        actor_loss = (self.alpha * log_pi - Q_expected).mean()
+
+        self.actor_opt.zero_grad()
+        actor_loss.backward()
+        self.actor_opt.step()
+
+        # ----- Alpha loss -----
+        if self.alpha_opt:
+            alpha_loss = -(self.alpha * (log_pi + self.target_ent).detach()).mean()
+            self.alpha_opt.zero_grad()
+            alpha_loss.backward()
+            self.alpha_opt.step()
+
+        # ----------------------- update target networks ----------------------- #
+        if self.learn_step_counter % self.SOFT_UPDATE_ITER == 0:
+            soft_update(self.critic_tgt, self.critic)
         self.learn_step_counter += 1

@@ -3,6 +3,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import random
+from torch.distributions import Normal
 
 
 def hidden_init(layer):
@@ -104,3 +105,55 @@ class Critic(nn.Module):
         x = torch.cat((x, action), dim=1)
         x = F.relu(self.fc2(x))
         return self.fc3(x)
+
+
+class MLP(nn.Module):
+    def __init__(self, d_in, d_out, hidden=256):
+        super().__init__()
+        self.net = nn.Sequential(
+            nn.Linear(d_in, hidden), nn.ReLU(),
+            nn.Linear(hidden, hidden), nn.ReLU(),
+            nn.Linear(hidden, d_out)
+        )
+    def forward(self, x):
+        return self.net(x)
+    
+
+class SoftActor(nn.Module):
+    def __init__(self, s_dim, a_dim, a_bound=1.0):
+        super().__init__()
+        self.backbone = MLP(s_dim, 256)
+        self.mu = nn.Linear(256, a_dim)
+        self.log_std = nn.Linear(256, a_dim)
+        self.a_bound = a_bound
+    
+    def dist(self, s):
+        h = self.backbone(s)
+        mu = self.mu(h)
+        log_std = torch.clamp(self.log_std(h), -20, 2)
+        return Normal(mu, log_std.exp())
+    
+    def forward(self, s, deterministic=False):
+        dist = self.dist(s)
+        if deterministic:
+            a = dist.mean
+        else:
+            a = dist.rsample() 
+        a = torch.tanh(a) * self.a_bound
+        log_pi = dist.log_prob(a/self.a_bound).sum(-1, keepdim=True)
+        log_pi -= (2*(np.log(2) - a - F.softplus(-2*a))).sum(-1, keepdim=True)
+        return a, log_pi
+
+
+class SoftCritic(nn.Module):
+    def __init__(self, s_dim, a_dim):
+        super().__init__()
+        self.q1 = MLP(s_dim+a_dim, 1)
+        self.q2 = MLP(s_dim+a_dim, 1)
+        
+    def both(self, s, a):
+        sa = torch.cat([s, a], -1)
+        return self.q1(sa), self.q2(sa)
+    
+    def forward(self, s, a):
+        return torch.min(*self.both(s, a))

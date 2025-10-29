@@ -35,7 +35,7 @@ class bAgent():
         
         self.update_sa() # init state size and action size
         
-        self.model_dict = {'dqn': DQN, 'ddpg': DDPG}
+        self.model_dict = {'dqn': DQN, 'ddpg': DDPG, 'sac': SAC}
         self.support_model = list(self.model_dict.keys())
         assert model_name in self.support_model, f"invalid model name [{model_name}], supported model: {self.support_model}"
         self.model = self.make_model(model_name, self.state_size, self.action_size, self.n_agent, self.seed_num,
@@ -112,7 +112,7 @@ class bAgent():
             while not done:
                 action = self.model.act(state)
                 action = self.agent_wrapper.action_wrapper(action, self.model_abound, self.env_abound, self.isMap)
-           
+          
                 next_state, reward, terminated, truncated, info = self.env.step(action)
             
                 next_state = self.agent_wrapper.state_wrapper(next_state)

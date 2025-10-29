@@ -3,7 +3,7 @@ import gymnasium as gym
 import highway_env
 
 # Create our training environment - a cart with a pole that needs balancing
-env = gym.make("CartPole-v1", render_mode="human")
+env = gym.make("parking-v0", render_mode="human")
 
 # Reset environment to start a new episode
 observation, info = env.reset()
@@ -12,7 +12,7 @@ observation, info = env.reset()
 
 print(f"env type {type(env)}")
 # print(f"Starting observation: {env.observation_space.low}, {type(env.observation_space)}")
-print(f"action space {env.action_space.n}, {type(env.action_space)}, env name {env.spec.id}")
+print(f"action space {env.action_space}, {type(env.action_space)}, env name {env.spec.id}")
 # Example output: [ 0.01234567 -0.00987654  0.02345678  0.01456789]
 # [cart_position, cart_velocity, pole_angle, pole_angular_velocity]
 
