@@ -1,5 +1,5 @@
 import numpy as np
-from .replay_buffer import ReplayBuffer
+from .replay_buffer import *
 from .bNN import *
 import torch
 import torch.nn.functional as F
@@ -55,7 +55,8 @@ class DDPG(bModel):
             WEIGHT_DECAY (int):        L2 weight decay
         """
         super().__init__(*args, **kw)
-
+        self.model_name = 'ddpg'
+        
         # meta param
         self.TAU = TAU
         self.LR_ACTOR = LR_ACTOR
@@ -178,7 +179,8 @@ class DQN(bModel):
             bModel
         """
         super().__init__(*args, **kw)
-
+        self.model_name = 'dqn'
+        
         # Q Network
         self.qnet_local = QNet(self.state_size, self.action_size, self.random_seed, 128).to(self.device)
         self.qnet_target = QNet(self.state_size, self.action_size, self.random_seed, 128).to(self.device)
@@ -271,12 +273,13 @@ class SAC(bModel):
         Params
         ======
             TAU (float):               soft update of target parameters
-            ALPHA (float):             
-            AUTO_ALPHA (float):        alpha learning
-            TARGET_ENT (int):          
+            ALPHA (float):             learnable weight for policy entropy
+            AUTO_ALPHA (float):        alpha is learnable or freezed 
+            TARGET_ENT (int):          target policy entropy (-|A| action dim)
         """
         super().__init__(*args, **kw)
-
+        self.model_name = 'sac'
+        
         # meta param
         self.TAU = TAU
         self.ALPHA = ALPHA
@@ -300,7 +303,7 @@ class SAC(bModel):
         self.critic_opt = optim.Adam(self.critic.parameters(), lr=self.LR)
 
     def get_action_space(self):
-        return [] if self.DETERM else [[-1.0, 1.0]]
+        return [] if self.DETERM else [[-1.0, 1.0] for i in range(self.action_size)]
     
     @property
     def alpha(self):
@@ -314,8 +317,10 @@ class SAC(bModel):
         with torch.no_grad():
             action, _ = self.actor(state, self.DETERM)
         self.actor.train()
+        
         action = action.cpu().data
         action = action[0]
+        
         return torch.clip(action, -1, 1).numpy()
 
     def step(self, states, actions, rewards, next_states, dones):
@@ -379,3 +384,95 @@ class SAC(bModel):
         if self.learn_step_counter % self.SOFT_UPDATE_ITER == 0:
             soft_update(self.critic_tgt, self.critic)
         self.learn_step_counter += 1
+        
+        
+"""
+Implementation of PPO
+"""
+class PPO(bModel):
+    def __init__(self, *args,
+                 LAM=0.95,
+                 CLIP_EPS=0.2, 
+                 EPOCHS=10, 
+                 **kw):
+        """
+        Params
+        ======
+            LAM (float):               soft update of target parameters
+            ALPHA (float):             learnable weight for policy entropy
+            AUTO_ALPHA (float):        alpha is learnable or freezed 
+            TARGET_ENT (int):          target policy entropy (-|A| action dim)
+        """
+        super().__init__(*args, **kw)
+        self.model_name = 'ppo'
+        
+        # meta param
+        self.LAM = LAM
+        self.CLIP_EPS = CLIP_EPS
+        self.EPOCHS = EPOCHS
+        
+        self.actor  = PPOActor(self.state_size, self.action_size).to(self.device)
+        self.critic = PPOCritic(self.state_size).to(self.device)
+        self.opt = optim.Adam(list(self.actor.parameters()) + list(self.critic.parameters()), lr=self.LR)
+        
+        self.memory = ""
+
+    def act(self, state):
+        state = np.expand_dims(state, 0)
+        state = torch.tensor(state, dtype=torch.float).to(self.device)
+        
+        self.actor.eval()
+        with torch.no_grad():
+            action, _ = self.actor(state, self.DETERM)
+        self.actor.train()
+        
+        action = action.cpu().data
+        action = action[0]
+        
+        return torch.clip(action, -1, 1).numpy()
+    
+    @torch.no_grad()
+    def rollout(self, env, max_steps=200):
+        buf = RolloutBuffer()
+        s, _ = env.reset()
+        for _ in range(max_steps):
+            a, logp = self.actor.act(torch.tensor(s, dtype=torch.float32).to(self.device))
+            a_np = a.cpu().numpy()
+            s_, r, d, trunc, _ = env.step(a_np)
+            v = self.critic(torch.tensor(s, dtype=torch.float32).to(self.device)).item()
+            buf.add(s, a_np, logp.cpu().numpy(), r, d, v)
+            s = s_
+            if d or trunc:
+                break
+        last_val = self.critic(torch.tensor(s, dtype=torch.float32).to(self.device)).item() if not d else 0
+        
+        return buf.get()
+
+    def update(self, buf):
+        states, actions, old_logp, advs, returns = buf
+        states, actions, old_logp, advs, returns = [x.to(self.device) for x in (states, actions, old_logp, advs, returns)]
+        
+        # standard advantage
+        advs = (advs - advs.mean()) / (advs.std() + 1e-8)
+
+        dataset = torch.utils.data.TensorDataset(states, actions, old_logp, advs, returns)
+        loader  = torch.utils.data.DataLoader(dataset, batch_size=self.batch, shuffle=True)
+
+        for _ in range(self.EPOCHS):
+            for s, a, logp_old, adv, ret in loader:
+                # --- Actor loss ---
+                _, logp = self.actor.act(s)
+                ratio = torch.exp(logp - logp_old)
+                surr1 = ratio * adv
+                surr2 = torch.clamp(ratio, 1-self.CLIP_EPS, 1+self.CLIP_EPS) * adv
+                actor_loss  = -torch.min(surr1, surr2).mean()
+                
+                # --- Critic loss ---
+                value = self.critic(s)
+                critic_loss = F.mse_loss(value, ret)
+                
+                # --- Total ---
+                loss = actor_loss + 0.5*critic_loss - 0.001*logp.mean()
+                self.opt.zero_grad()
+                loss.backward()
+                self.opt.step()

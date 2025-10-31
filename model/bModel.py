@@ -10,7 +10,7 @@ import copy
 class bModel:
     """Basic functions"""
 
-    def __init__(self, state_size, action_size, n_agents, random_seed, 
+    def __init__(self, state_size, action_size, random_seed, 
                  BUFFER_SIZE=1e4,
                  BUFFER_THRESHOLD=500,
                  BATCH_SIZE = 64,
@@ -34,6 +34,7 @@ class bModel:
             EPSILON = (float):         greedy epsilon
         """
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        self.model_name = 'BaseModel'
         
         # meta param
         self.BUFFER_SIZE = int(BUFFER_SIZE)
@@ -47,7 +48,6 @@ class bModel:
         # model param
         self.state_size = state_size
         self.action_size = action_size
-        self.n_agents = n_agents
         self.random_seed = random_seed
         self.isEval = False
         self.epislon_decay = 1

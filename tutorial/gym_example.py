@@ -12,7 +12,7 @@ observation, info = env.reset()
 
 print(f"env type {type(env)}")
 # print(f"Starting observation: {env.observation_space.low}, {type(env.observation_space)}")
-print(f"action space {env.action_space}, {type(env.action_space)}, env name {env.spec.id}")
+print(f"state space {env.observation_space}, action space {env.action_space}, {type(env.action_space)}, env name {env.spec.id}")
 # Example output: [ 0.01234567 -0.00987654  0.02345678  0.01456789]
 # [cart_position, cart_velocity, pole_angle, pole_angular_velocity]
 

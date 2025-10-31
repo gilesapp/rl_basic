@@ -12,9 +12,13 @@ def hidden_init(layer):
     return (-lim, lim)
 
 
+"""
+---------------------------------------------------
+------------------------DQN------------------------
+---------------------------------------------------
+"""
 class QNet(nn.Module):
-    """Q-net Model."""
-
+    """DQN MLP"""
     def __init__(self, state_size, action_size, seed, fc1_units=128, fc2_units=128):
         """Initialize parameters and build model.
         Params
@@ -42,9 +46,13 @@ class QNet(nn.Module):
         return self.fc2(x)
     
     
+"""
+---------------------------------------------------
+------------------------DDPG-----------------------
+---------------------------------------------------
+"""  
 class Actor(nn.Module):
-    """Actor (Policy) Model."""
-
+    """DDPG Actor (Policy) Model"""
     def __init__(self, state_size, action_size, seed, fc1_units=128, fc2_units=128):
         """Initialize parameters and build model.
         Params
@@ -75,8 +83,7 @@ class Actor(nn.Module):
 
 
 class Critic(nn.Module):
-    """Critic (Value) Model."""
-
+    """DDPG Critic (Value) Model"""
     def __init__(self, state_size, action_size, seed, fc1_units=128, fc2_units=128):
         """Initialize parameters and build model.
         Params
@@ -107,7 +114,13 @@ class Critic(nn.Module):
         return self.fc3(x)
 
 
-class MLP(nn.Module):
+"""
+---------------------------------------------------
+------------------------SAC------------------------
+---------------------------------------------------
+""" 
+class SMLP(nn.Module):
+    """SAC MLP"""
     def __init__(self, d_in, d_out, hidden=256):
         super().__init__()
         self.net = nn.Sequential(
@@ -120,9 +133,10 @@ class MLP(nn.Module):
     
 
 class SoftActor(nn.Module):
+    """SAC Actor (Policy) Model"""
     def __init__(self, s_dim, a_dim, a_bound=1.0):
         super().__init__()
-        self.backbone = MLP(s_dim, 256)
+        self.backbone = SMLP(s_dim, 256)
         self.mu = nn.Linear(256, a_dim)
         self.log_std = nn.Linear(256, a_dim)
         self.a_bound = a_bound
@@ -146,10 +160,11 @@ class SoftActor(nn.Module):
 
 
 class SoftCritic(nn.Module):
+    """SAC Critic (Value) Model"""
     def __init__(self, s_dim, a_dim):
         super().__init__()
-        self.q1 = MLP(s_dim+a_dim, 1)
-        self.q2 = MLP(s_dim+a_dim, 1)
+        self.q1 = SMLP(s_dim+a_dim, 1)
+        self.q2 = SMLP(s_dim+a_dim, 1)
         
     def both(self, s, a):
         sa = torch.cat([s, a], -1)
@@ -157,3 +172,55 @@ class SoftCritic(nn.Module):
     
     def forward(self, s, a):
         return torch.min(*self.both(s, a))
+    
+
+"""
+---------------------------------------------------
+------------------------PPO------------------------
+---------------------------------------------------
+""" 
+class PPOMLP(nn.Module):
+    def __init__(self, d_in, d_out, hidden=64):
+        super().__init__()
+        self.net = nn.Sequential(
+            nn.Linear(d_in, hidden), nn.Tanh(),
+            nn.Linear(hidden, hidden), nn.Tanh(),
+            nn.Linear(hidden, d_out)
+        )
+    def forward(self, x):
+        return self.net(x)
+    
+
+class PPOActor(nn.Module):
+    """PPO Actor (Policy) Model"""
+    def __init__(self, s_dim, a_dim, a_bound=1.0):
+        super().__init__()
+        self.backbone = PPOMLP(s_dim, a_dim)
+        self.log_std = nn.Parameter(torch.zeros(a_dim))
+        self.a_bound = a_bound
+    
+    def dist(self, s):
+        mu = self.backbone(s)
+        std = self.log_std.exp().expand_as(mu)
+        return Normal(mu, std)
+    
+    def act(self, s, deterministic=False):
+        dist = self.dist(s)
+        if deterministic:
+            a = dist.mean
+        else:
+            a = dist.sample()
+        a = torch.tanh(a) * self.a_bound
+        log_pi = dist.log_prob(a / self.a_bound).sum(-1)
+        log_pi -= (2 * (np.log(2) - a - F.softplus(-2 * a))).sum(-1)
+        return a, log_pi
+
+
+class PPOCritic(nn.Module):
+    """PPO Critic (Value) Model"""
+    def __init__(self, s_dim):
+        super().__init__()
+        self.v = PPOMLP(s_dim, 1)
+        
+    def forward(self, s):
+        return self.v(s).squeeze(-1)

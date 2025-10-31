@@ -55,3 +55,33 @@ class ReplayBuffer:
     def __len__(self):
         """Return the current size of internal memory."""
         return len(self.memory)
+    
+    
+class RolloutBuffer:
+    def __init__(self, device):
+        self.states, self.actions, self.logps, self.rews, self.dones, self.values = [], [], [], [], [], []
+        self.device = device
+    
+    def add(self, s, a, logp, r, d, v):
+        self.states.append(s); self.actions.append(a); self.logps.append(logp)
+        self.rews.append(r); self.dones.append(d); self.values.append(v)
+    
+    def compute_returns_advantages(self, last_val, gamma=0.99, lam=0.95):
+        rewards = np.array(self.rews + [last_val])
+        dones   = np.array(self.dones + [0])
+        values  = np.array(self.values + [last_val])
+
+        deltas = rewards[:-1] + gamma * values[1:] * (1 - dones[:-1]) - values[:-1]
+        gae = 0; advs = []
+        for step in reversed(range(len(deltas))):
+            gae = deltas[step] + gamma * lam * (1 - dones[step]) * gae
+            advs.insert(0, gae)
+        returns = np.array(advs) + np.array(self.values)
+        
+        return torch.tensor(advs, dtype=torch.float32).to(self.device), torch.tensor(returns, dtype=torch.float32).to(self.device)
+    
+    def get(self):
+        return (torch.tensor(np.array(self.states), dtype=torch.float32).to(self.device),
+                torch.tensor(np.array(self.actions), dtype=torch.float32).to(self.device),
+                torch.tensor(np.array(self.logps),  dtype=torch.float32).to(self.device),
+                *self.compute_returns_advantages(0))
