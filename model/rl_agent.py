@@ -41,8 +41,7 @@ class OffPolicyAgent(bAgent):
             
             while not done:
                 action = self.model.act(state)
-                action = self.agent_wrapper.action_wrapper(action, self.model_abound, self.env_abound, self.isMap)
-          
+             
                 next_state, reward, terminated, truncated, info = self.env.step(action)
             
                 next_state = self.agent_wrapper.state_wrapper(next_state)
@@ -62,11 +61,11 @@ class OffPolicyAgent(bAgent):
         if save_pth == None:
             save_pth = self.model_save_pth
         os.makedirs(save_pth, exist_ok=True)
-        self.model.save_model(f"{save_pth}{self.env.spec.id}_{self.model_name}_eps{n_episodes}.pt")
+        self.model.save_model(f"{save_pth}{self.env.spec.id}_{self.model.model_name}_eps{n_episodes}.pt")
 
         if plot:
             os.makedirs(self.fig_save_pth, exist_ok=True)
-            plot_train(train_reward, f'{self.fig_save_pth}{self.env.spec.id}_{self.model_name}_eps{n_episodes}')
+            plot_train(train_reward, f'{self.fig_save_pth}{self.env.spec.id}_{self.model.model_name}_eps{n_episodes}')
     
     def test(self, model_pth):
         self.model.load_model(model_pth)
@@ -81,7 +80,6 @@ class OffPolicyAgent(bAgent):
 
         while not done:
             action = self.model.act(state)
-            action = self.agent_wrapper.action_wrapper(action, self.model_abound, self.env_abound, self.isMap)
          
             next_state, reward, terminated, truncated, info = self.env.step(action)
             next_state = self.agent_wrapper.state_wrapper(next_state)

@@ -1,0 +1,6 @@
+tutorial/draft.py
+model/__pycache__/bAgent.cpython-311.pyc
+model/__pycache__/bModel.cpython-311.pyc
+model/__pycache__/bNN.cpython-311.pyc
+model/__pycache__/rl_agent.cpython-311.pyc
+model/__pycache__/rl_model.cpython-311.pyc

@@ -1,16 +1,13 @@
 import numpy as np
-from .replay_buffer import ReplayBuffer
 import torch
 import torch.nn.functional as F
 import torch.optim as optim
-import random
-import copy
 
 
 class bModel:
     """Basic functions"""
 
-    def __init__(self, state_size, action_size, random_seed, 
+    def __init__(self, state_size, action_size, random_seed, agent_wrapper=None,
                  BUFFER_SIZE=1e4,
                  BUFFER_THRESHOLD=500,
                  BATCH_SIZE = 64,
@@ -35,6 +32,7 @@ class bModel:
         """
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         self.model_name = 'BaseModel'
+        self.agent_wrapper = agent_wrapper
         
         # meta param
         self.BUFFER_SIZE = int(BUFFER_SIZE)
@@ -52,20 +50,28 @@ class bModel:
         self.isEval = False
         self.epislon_decay = 1
         self.learn_step_counter = 0
+        
+        # update action bound
+        if self.agent_wrapper:
+            self.agent_wrapper.update_action_bound(self.get_action_space(), self.action_size)
 
-        # replay memory
-        self.memory = ReplayBuffer(int(BUFFER_SIZE), BATCH_SIZE, random_seed, self.device)
-
+    def wrap_action(self, action):
+        """Wrap action."""
+        if self.agent_wrapper:
+            return self.agent_wrapper.action_wrapper(action)
+        else:
+            action
+        
     def get_action_space(self):
         """Returns model action space."""
         return []
     
     def load_model(self, pth):
-        # ***.load_state_dict(torch.load(pth))
+        """***.load_state_dict(torch.load(pth))."""
         pass
     
     def save_model(self, pth):
-        # torch.save(***.state_dict(), pth)
+        """torch.save(***.state_dict(), pth)."""
         pass
 
     def eval(self):

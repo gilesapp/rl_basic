@@ -19,13 +19,13 @@ from model.rl_agent import *
  
  
 def main():
-    env = gym.make("CartPole-v1", render_mode="human")
+    env = gym.make("Pendulum-v1", render_mode="human")
     
-    agent = DQNAgent(env)
+    agent = DDPGAgent(env)
     
     # run
     # agent.train(n_episodes=150, plot=True) # default model save path: ckpt/[env name]_[model name]_[eps num]
-    agent.test("ckpt/CartPole-v1_dqn_eps150.pt")
+    agent.test("ckpt/Pendulum-v1_ddpg_eps1200.pt")
     
     env.close()
 

@@ -1,3 +1,5 @@
 # torch torchvision --index-url https://download.pytorch.org/whl/cu126
-gymnasium
-highway-env
+gymnasium==1.2.1
+highway-env==1.10.2
+tqdm
+numpy==1.26.4

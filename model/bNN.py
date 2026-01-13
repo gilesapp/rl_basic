@@ -144,7 +144,7 @@ class SoftActor(nn.Module):
     def dist(self, s):
         h = self.backbone(s)
         mu = self.mu(h)
-        log_std = torch.clamp(self.log_std(h), -20, 2)
+        log_std = torch.clamp(self.log_std(h), -20, 2) # -20 and 2 are experiental number, constraint bound for log_std
         return Normal(mu, log_std.exp())
     
     def forward(self, s, deterministic=False):
@@ -155,7 +155,7 @@ class SoftActor(nn.Module):
             a = dist.rsample() 
         a = torch.tanh(a) * self.a_bound
         log_pi = dist.log_prob(a/self.a_bound).sum(-1, keepdim=True)
-        log_pi -= (2*(np.log(2) - a - F.softplus(-2*a))).sum(-1, keepdim=True)
+        log_pi -= (2*(np.log(2) - a - F.softplus(-2*a))).sum(-1, keepdim=True) # 2 and -2 are derivative of tanh
         return a, log_pi
 
 
